@@ -331,9 +331,7 @@ ExecutionResult execute(
   ModuleInstance instance(module, &interface);
 
   try {
-    Name main = Name("main");
-    LiteralList args;
-    instance.callExport(main, args);
+    instance.callExport(Name("main"), LiteralList{});
   } catch (EndExecution const&) {
     // This exception is ignored here because we consider it to be a success.
     // It is only a clutch for POSIX style exit()
