@@ -44,6 +44,7 @@ ExternalProject_Add(binaryen
     BINARY_DIR ${binary_dir}
     URL https://github.com/WebAssembly/binaryen/archive/1.38.9.tar.gz
     URL_HASH SHA256=f8c6d4deb83dba8709c4df9f7983080ec0f9412e88899767ed2815b911ce1ebd
+    PATCH_COMMAND sh ${CMAKE_CURRENT_LIST_DIR}/patch_binaryen.sh
     CMAKE_ARGS
     -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
     -DCMAKE_BUILD_TYPE=Release
