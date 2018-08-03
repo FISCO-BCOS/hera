@@ -36,6 +36,7 @@ These are to be used via EVMC `set_option`:
 - `evm2wasm.js-trace=true` will turn on EVM tracing for `evm2wasm.js`
 - `evm2wasm.cpp=true` will use a `evm2wasm` as a compiled-in dependency instead of the system contract
 - `evm2wasm.cpp-trace=true` will turn on EVM tracing for `evm2wasm.cpp`
+- `sys:0x<address>=file.wasm` will override the code executing at the specified address with code loaded from a filepath at runtime. This option supports aliases for system contracts as well, such that names like `sys:sentinel=file.wasm` or `sys:evm2wasm=file.wasm` will also resolve to their corresponding addresses as specified by the ewasm design document.
 
 ## Interfaces
 

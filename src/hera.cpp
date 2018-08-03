@@ -64,6 +64,7 @@ struct hera_instance : evmc_instance {
   hera_wasm_engine wasm_engine = hera_wasm_engine::binaryen;
   hera_evm_mode evm_mode = hera_evm_mode::reject;
   bool metering = false;
+  vector<pair<evmc_address, string>> contract_preload_list;
 
   hera_instance() noexcept : evmc_instance({EVMC_ABI_VERSION, "hera", hera_get_buildinfo()->project_version, nullptr, nullptr, nullptr, nullptr}) {}
 };
@@ -84,6 +85,91 @@ bool hasWasmPreamble(vector<uint8_t> const& _input) {
     _input[5] == 0 &&
     _input[6] == 0 &&
     _input[7] == 0;
+}
+
+#if HERA_DEBUGGING
+//Returns a formatted string (with prefix "0x") representing the bytes of an array.
+string bytesAsHexStr(const uint8_t *bytes, const size_t length) {
+  stringstream ret;
+  ret << hex << "0x";
+
+  for (size_t i = 0; i < length; ++i) {
+    ret << setw(2) << setfill('0') << (int)bytes[i];
+  }
+
+  return ret.str();
+}
+
+void debugPrintPreloadList(const hera_instance* hera) {
+  auto const& list = hera->contract_preload_list;
+
+  cerr << "DEBUG: Preload list contents" << endl;
+  if (list.size() == 0) {
+    cerr << "List is empty!" << endl;
+    return;
+  }
+
+  for (size_t i = 0; i < list.size(); ++i) {
+    cerr << i << ": " << bytesAsHexStr(list[i].first.bytes, 20) << " => " << list[i].second << endl;
+  }
+}
+#endif
+
+//Resolve an address on the preload list to a filepath containing the binary.
+//This assumes that the address is on the list, implying resolveSystemContract has been called.
+string resolvePreloadPath(const evmc_address* addr, const hera_instance *hera) {
+  auto const& list = hera->contract_preload_list;
+
+  for (size_t i = 0; i < list.size(); ++i) {
+    if (memcmp(list[i].first.bytes, addr->bytes, sizeof(evmc_address)) == 0) {
+#if HERA_DEBUGGING
+      cerr << "Successfully resolved address " << bytesAsHexStr(addr->bytes, 20) << " to filepath " << list[i].second << endl;
+#endif
+      return string(list[i].second);
+    }  
+  }
+
+  heraAssert(false, "The specified address could not be resolved to a filepath with its binary.");
+}
+
+//Returns the bytecode to be overridden before execution
+vector<uint8_t> overrideRunCode(const evmc_address *addr, const hera_instance *hera) {
+  const string path = resolvePreloadPath(addr, hera);
+
+#if HERA_DEBUGGING
+  cerr << "Attempting to load file " << path << endl;
+#endif
+  ifstream fp;
+  fp.open(path.c_str(), ios::in | ios::binary);
+
+  if (!fp.is_open()) throw InternalErrorException(string("Failed to open WASM binary"));
+  
+  istreambuf_iterator<char> fp_start(fp), fp_end;
+  vector<char> bytecode(fp_start, fp_end);
+#if HERA_DEBUGGING
+  cerr << "Successfully loaded file " << path << endl;
+#endif
+  //Replace the run code with the loaded bytecode
+  return vector<uint8_t>(bytecode.begin(), bytecode.end());
+}
+
+//Checks if the contract preload list contains the given address.
+bool resolveSystemContract(const hera_instance *hera, const evmc_address *addr) {
+  auto const& list = hera->contract_preload_list;
+
+  for (size_t i = 0; i < list.size(); ++i) {
+    if (memcmp(list[i].first.bytes, addr->bytes, sizeof(evmc_address)) == 0) {
+#if HERA_DEBUGGING
+      cerr << "Successfully resolved address " << bytesAsHexStr(addr->bytes, 20) << endl;
+#endif
+      return true;
+    }   
+  }
+  
+#if HERA_DEBUGGING
+  cerr << "Address does not match " << bytesAsHexStr(addr->bytes, 20) << endl;
+#endif
+  return false;
 }
 
 // Calls a system contract at @address with input data @input.
@@ -355,11 +441,10 @@ evmc_result hera_execute(
   const uint8_t *code,
   size_t code_size
 ) noexcept {
-  hera_instance* hera = static_cast<hera_instance*>(instance);
-
   evmc_result ret;
   memset(&ret, 0, sizeof(evmc_result));
-
+  
+  hera_instance* hera = static_cast<hera_instance*>(instance);
   try {
     heraAssert(rev == EVMC_BYZANTIUM, "Only Byzantium supported.");
     heraAssert(msg->gas >= 0, "EVMC supplied negative startgas");
@@ -412,6 +497,21 @@ evmc_result hera_execute(
     }
 
     heraAssert(hera->wasm_engine == hera_wasm_engine::binaryen, "Unsupported wasm engine.");
+    
+#if HERA_DEBUGGING
+    debugPrintPreloadList(hera);
+#endif
+    if (resolveSystemContract(hera, &msg->destination)) {
+#if HERA_DEBUGGING
+      cerr << "Overriding code" << endl;
+      cerr << "Original code: " << bytesAsHexStr(run_code.data(), run_code.size()) << endl;
+#endif
+      run_code = overrideRunCode(&msg->destination, hera);
+      run_code.shrink_to_fit();
+#if HERA_DEBUGGING
+      cerr << "New code: " << bytesAsHexStr(run_code.data(), run_code.size()) << endl;
+#endif
+    }
 
     ExecutionResult result = execute(context, run_code, state_code, *msg, meterInterfaceGas);
     heraAssert(result.gasLeft >= 0, "Negative gas left after execution.");
@@ -495,6 +595,109 @@ evmc_result hera_execute(
   return ret;
 }
 
+// we aren't at c++17 yet so a pair will be used rather than std::optional
+pair<evmc_address, bool> resolve_alias_to_address(string const& alias) {
+  map<string, evmc_address> alias_to_addr_map = {
+    { string("sentinel"), sentinelAddress },
+    { string("evm2wasm"), evm2wasmAddress }
+  };
+
+  evmc_address ret = {};
+  bool status = false;
+  
+  if (alias_to_addr_map.count(alias) != 0) {
+#if HERA_DEBUGGING
+    cerr << "Successfully resolved alias " << alias 
+      << " to address " << hex << alias_to_addr_map[alias].bytes 
+      << dec << endl;
+#endif
+    ret = alias_to_addr_map[alias];
+    status = true;
+  }
+
+  return pair<evmc_address, bool>(ret, status);
+}
+
+pair<evmc_address, bool> parse_hex_addr(string const& addr) {
+  evmc_address ret = {};
+  
+#if HERA_DEBUGGING
+  cerr << "Trying to parse address field" << endl;
+#endif
+
+  if (addr.find("0x") != 0) { 
+    cerr << addr << ": "; 
+    heraAssert(false, "Address missing '0x' prefix!");
+  }
+
+  heraAssert(addr.size() <= 42, "Address specified is too long!");
+
+  string addr_raw;
+  //if the number of nibbles is odd, we must prepend a zero for unmarshalling to work correctly.
+  if (addr.size() % 2 > 0) addr_raw.push_back('0');
+  addr_raw.append(addr.substr(2, string::npos));
+
+  size_t hex_length = addr_raw.size();
+
+#if HERA_DEBUGGING
+  cerr << "Got hex string of length " << hex_length << ": " << addr_raw << endl;
+#endif 
+
+  //Use strtol to parse hex string into binary
+  for (size_t i = hex_length / 2, j = 20; i > 0 && j > 0; i--, j--) {
+    string byte_str = addr_raw.substr(((i - 1) * 2), 2);
+
+    uint8_t byte = uint8_t(strtol(byte_str.c_str(), nullptr, 16));
+
+    ret.bytes[j - 1] = byte;
+  }
+
+#if HERA_DEBUGGING
+  cerr << "Successfully unmarshalled hex string into address struct" << endl;
+#endif
+
+  return pair<evmc_address, bool>(ret, true);
+}
+
+pair<evmc_address, bool> parse_preload_addr(const char *name)
+{
+  assert(name != nullptr);
+
+  pair<evmc_address, bool> ret = { {}, false };
+  string evmc_option_raw = string(name);
+
+#if HERA_DEBUGGING
+  cerr << "Trying to parse EVMC option as preload flag: " << evmc_option_raw << endl;
+#endif 
+
+  //Check the "sys:" syntax by comparing substring
+  if (evmc_option_raw.find("sys:") != 0) {
+#if HERA_DEBUGGING
+  cerr << "Unsuccessfully parsed preload command, prefix malformed: " << evmc_option_raw.substr(0, 4) << endl;
+#endif
+    return ret;
+  }
+  
+  //Parse the address field from the option name and try to determine an address
+  string opt_address_to_load = evmc_option_raw.substr(4, string::npos);
+
+  //Try to resolve the substring to an alias first
+#if HERA_DEBUGGING
+  cerr << "Attempting to parse option as an alias: " << opt_address_to_load << endl;
+#endif
+  ret = resolve_alias_to_address(opt_address_to_load);
+  
+  //If alias resolver returns false, try parsing to a hex address
+  if (ret.second == false) {
+#if HERA_DEBUGGING
+    cerr << "Unsuccessfully resolved option to an alias, trying to unmarshal from a hex string" << endl;
+#endif
+    ret = parse_hex_addr(opt_address_to_load);
+  }
+
+  return ret;
+}
+
 int hera_set_option(
   evmc_instance *instance,
   char const *name,
@@ -554,6 +757,12 @@ int hera_set_option(
        hera->wasm_engine = hera_wasm_engine::wavm;
 #endif
      return 1;
+  }
+
+  auto preload_addr = parse_preload_addr(name);
+  if (preload_addr.second == true) {
+    hera->contract_preload_list.push_back(pair<evmc_address, string>(preload_addr.first, string(value)));
+    return 1;
   }
 
   return 0;
