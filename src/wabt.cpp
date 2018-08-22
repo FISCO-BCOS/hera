@@ -43,6 +43,11 @@ using namespace std;
 
 namespace hera {
 
+//std::unique_ptr<wabt::Module> WabtEngine::parseModule(vector<uint8_t> const& code)
+//{
+//  wabt::BinaryReader reader(code.data(), code.size(), .., ReadBinaryOptions{});
+//}
+
 ExecutionResult WabtEngine::execute(
   evmc_context* context,
   vector<uint8_t> const& code,
