@@ -35,6 +35,7 @@
 #include <src/validator.h>
 #include <src/wast-parser.h>
 
+#include "wabt.h"
 #include "eei.h"
 #include "exceptions.h"
 
@@ -42,7 +43,19 @@ using namespace std;
 
 namespace hera {
 
-void wat2wasm() {
+ExecutionResult WabtEngine::execute(
+  evmc_context* context,
+  vector<uint8_t> const& code,
+  vector<uint8_t> const& state_code,
+  evmc_message const& msg,
+  bool meterInterfaceGas
+) {
+  (void)context;
+  (void)code;
+  (void)state_code;
+  (void)msg;
+  (void)meterInterfaceGas;
+
   std::unique_ptr<wabt::WastLexer> lexer = wabt::WastLexer::CreateFileLexer({});
 
   wabt::Features s_features;
@@ -76,6 +89,8 @@ void wat2wasm() {
       }
     }
   }
+
+  return ExecutionResult{};
 }
 
 }

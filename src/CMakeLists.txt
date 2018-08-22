@@ -12,6 +12,7 @@ add_library(hera
     eei.h
     hera.cpp
     wabt.cpp
+    wabt.h
 )
 
 option(HERA_DEBUGGING "Display debugging messages during execution." ON)
