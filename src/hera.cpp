@@ -31,6 +31,7 @@
 #include "debugging.h"
 #include "eei.h"
 #include "exceptions.h"
+#include "wabt.h"
 
 #include <hera/buildinfo.h>
 
@@ -318,7 +319,8 @@ evmc_result hera_execute(
     }
 
     heraAssert(hera->wasm_engine == hera_wasm_engine::binaryen, "Unsupported wasm engine.");
-    BinaryenEngine engine = BinaryenEngine{};
+    //BinaryenEngine engine = BinaryenEngine{};
+    WabtEngine engine = WabtEngine{};
     ExecutionResult result = engine.execute(context, run_code, state_code, *msg, meterInterfaceGas);
     heraAssert(result.gasLeft >= 0, "Negative gas left after execution.");
 
