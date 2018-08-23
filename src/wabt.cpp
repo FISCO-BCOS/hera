@@ -220,7 +220,12 @@ ExecutionResult WabtEngine::execute(
   interface->setWasmMemory(env.GetMemory(0));
 
   // Execute main
-  wabt::interp::ExecResult wabtResult = executor.RunExport(&mainFunction, wabt::interp::TypedValues{});
+  try {
+    wabt::interp::ExecResult wabtResult = executor.RunExport(&mainFunction, wabt::interp::TypedValues{});
+  } catch (EndExecution const&) {
+    // This exception is ignored here because we consider it to be a success.
+    // It is only a clutch for POSIX style exit()
+  }
 
   // FIXME populate output
 
