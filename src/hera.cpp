@@ -320,8 +320,11 @@ evmc_result hera_execute(
     }
 
     heraAssert(hera->wasm_engine == hera_wasm_engine::binaryen, "Unsupported wasm engine.");
-    //BinaryenEngine engine = BinaryenEngine{};
+#if HAVE_WABT
     WabtEngine engine = WabtEngine{};
+#else
+    BinaryenEngine engine = BinaryenEngine{};
+#endif
     ExecutionResult result = engine.execute(context, run_code, state_code, *msg, meterInterfaceGas);
     heraAssert(result.gasLeft >= 0, "Negative gas left after execution.");
 
