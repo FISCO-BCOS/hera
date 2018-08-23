@@ -22,18 +22,21 @@
 #include <unistd.h>
 #include <string.h>
 #include <fstream>
+#include <iostream>
 
-#include <src/binary-writer.h>
-#include <src/common.h>
-#include <src/error-handler.h>
-#include <src/feature.h>
-#include <src/filenames.h>
-#include <src/ir.h>
-#include <src/option-parser.h>
-#include <src/resolve-names.h>
-#include <src/stream.h>
-#include <src/validator.h>
-#include <src/wast-parser.h>
+#include "src/binary-reader-interp.h"
+#include "src/binary-reader.h"
+#include "src/cast.h"
+#include "src/error-handler.h"
+#include "src/feature.h"
+#include "src/interp.h"
+#include "src/literal.h"
+#include "src/option-parser.h"
+#include "src/resolve-names.h"
+#include "src/stream.h"
+#include "src/validator.h"
+#include "src/wast-lexer.h"
+#include "src/wast-parser.h"
 
 #include "wabt.h"
 #include "eei.h"
@@ -42,11 +45,6 @@
 using namespace std;
 
 namespace hera {
-
-//std::unique_ptr<wabt::Module> WabtEngine::parseModule(vector<uint8_t> const& code)
-//{
-//  wabt::BinaryReader reader(code.data(), code.size(), .., ReadBinaryOptions{});
-//}
 
 ExecutionResult WabtEngine::execute(
   evmc_context* context,
@@ -61,39 +59,47 @@ ExecutionResult WabtEngine::execute(
   (void)msg;
   (void)meterInterfaceGas;
 
-  std::unique_ptr<wabt::WastLexer> lexer = wabt::WastLexer::CreateFileLexer({});
+  // This is the wasm state
+  wabt::interp::Environment env;
 
-  wabt::Features s_features;
+  // Lets add our host module
+  //wabt::interp::HostModule* host_module = env.AppendHostModule("ethereum");
+  //host_module->import_delegate.reset(instance...);
 
-  wabt::ErrorHandlerFile error_handler(wabt::Location::Type::Text);
-  std::unique_ptr<wabt::Module> module;
-  wabt::WastParseOptions parse_wast_options(s_features);
-  wabt::Result result =
-      wabt::ParseWatModule(lexer.get(), &module, &error_handler, &parse_wast_options);
+  std::unique_ptr<wabt::FileStream> errorStream = wabt::FileStream::CreateStderr();
 
-  if (wabt::Succeeded(result)) {
-    result = wabt::ResolveNamesModule(lexer.get(), module.get(), &error_handler);
+  wabt::ReadBinaryOptions options(
+    wabt::Features{},
+    errorStream.get(),
+    true, // ReadDebugNames
+    true, // StopOnFirstError
+    true // FailOnCustomSectionError
+  );
 
-    if (wabt::Succeeded(result)) {
-      wabt::ValidateOptions options(s_features);
-      result =
-          wabt::ValidateModule(lexer.get(), module.get(), &error_handler, &options);
-    }
+  wabt::ErrorHandlerFile error_handler(wabt::Location::Type::Binary);
+  wabt::interp::DefinedModule* module = nullptr;
+  wabt::ReadBinaryInterp(
+    &env,
+    code.data(),
+    code.size(),
+    &options,
+    &error_handler,
+    &module
+  );
+  heraAssert(module, "module not loaded?!");
 
-    if (wabt::Succeeded(result)) {
-      wabt::FileStream s_log_stream{wabt::string_view{}, nullptr};
-      wabt::MemoryStream stream(&s_log_stream);
-      result =
-          wabt::WriteBinaryModule(&stream, module.get(), nullptr);
+  // FIXME: iterate and find
+  heraAssert(module->exports.size() > 0, "not exports");
+  wabt::interp::Export & mainFunction = module->exports[0];
+  heraAssert(mainFunction.name == "main", "main not found");
 
-      if (wabt::Succeeded(result)) {
-//        if (s_outfile.empty()) {
-//          s_outfile = DefaultOuputName(s_infile);
-//        }
-//        WriteBufferToFile(s_outfile.c_str(), stream.output_buffer());
-      }
-    }
-  }
+  // No tracing, not threads
+  wabt::interp::Executor executor(&env, nullptr, wabt::interp::Thread::Options{});
+  
+  // Execute main
+  wabt::interp::ExecResult result = executor.RunExport(&mainFunction, wabt::interp::TypedValues{});
+
+  // FIXME populate output
 
   return ExecutionResult{};
 }
