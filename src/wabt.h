@@ -31,10 +31,18 @@ public:
     std::vector<uint8_t> const& _code,
     evmc_message const& _msg,
     ExecutionResult & _result,
-    bool _meterGas
+    bool _meterGas,
+    wabt::interp::Memory* _wasmMemory
   ):
-    EthereumInterface(_context, _code, _msg, _result, _meterGas)
-  { }
+    EthereumInterface(_context, _code, _msg, _result, _meterGas),
+    m_wasmMemory(_wasmMemory)
+  {
+//    heraAssert(m_wasmMemory, "No wasm memory area supplied?");
+  }
+
+  void setWasmMemory(wabt::interp::Memory* _wasmMemory) {
+    m_wasmMemory = _wasmMemory;
+  }
 
 protected:
   wabt::Result ImportFunc(
@@ -83,9 +91,11 @@ protected:
   );
 
 private:
-  size_t memorySize() const override { abort(); }
-  void memorySet(size_t offset, uint8_t value) override { (void)offset; (void)value; abort(); }
-  uint8_t memoryGet(size_t offset) override { (void)offset; abort(); }
+  size_t memorySize() const override { return m_wasmMemory ? m_wasmMemory->data.size(): 0; }
+  void memorySet(size_t offset, uint8_t value) override { m_wasmMemory->data[offset] = static_cast<char>(value); }
+  uint8_t memoryGet(size_t offset) override { return static_cast<uint8_t>(m_wasmMemory->data[offset]); }
+
+  wabt::interp::Memory* m_wasmMemory;
 };
 
 class WabtEngine : WasmEngine {

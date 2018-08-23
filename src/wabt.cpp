@@ -171,12 +171,15 @@ ExecutionResult WabtEngine::execute(
   (void)msg;
   (void)meterInterfaceGas;
 
+  HERA_DEBUG << "Executing..." << endl;
+
   // This is the wasm state
   wabt::interp::Environment env;
 
   // Lets instantiate our state
   ExecutionResult result;
-  WabtEthereumInterface* interface = new WabtEthereumInterface(context, state_code, msg, result, meterInterfaceGas);
+  // FIXME: this only uses memory index 0 ...
+  WabtEthereumInterface* interface = new WabtEthereumInterface(context, state_code, msg, result, meterInterfaceGas, env.GetMemory(0));
 
   // Lets add our host module
   wabt::interp::HostModule* hostModule = env.AppendHostModule("ethereum");
@@ -206,12 +209,15 @@ ExecutionResult WabtEngine::execute(
   ensureCondition(module, ContractValidationFailure, "Module failed to load.");
 
   // FIXME: iterate and find
-  heraAssert(module->exports.size() > 0, "not exports");
-  wabt::interp::Export & mainFunction = module->exports[0];
+  heraAssert(module->exports.size() > 1, "not exports");
+  wabt::interp::Export & mainFunction = module->exports[1];
   heraAssert(mainFunction.name == "main", "main not found");
 
   // No tracing, not threads
   wabt::interp::Executor executor(&env, nullptr, wabt::interp::Thread::Options{});
+
+  // FIXME: really bad design
+  interface->setWasmMemory(env.GetMemory(0));
 
   // Execute main
   wabt::interp::ExecResult wabtResult = executor.RunExport(&mainFunction, wabt::interp::TypedValues{});
