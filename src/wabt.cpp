@@ -39,6 +39,7 @@
 #include "src/wast-parser.h"
 
 #include "wabt.h"
+#include "debugging.h"
 #include "eei.h"
 #include "exceptions.h"
 
@@ -58,8 +59,13 @@ wabt::Result WabtEthereumInterface::ImportFunc(
   (void)func_sig;
   (void)callback;
   wabt::interp::HostFunc *hostFunc = reinterpret_cast<wabt::interp::HostFunc*>(func);
+  cout << "Importing " << import->field_name << endl;
   if (import->field_name == "useGas") {
     hostFunc->callback = wabtUseGas;
+    hostFunc->user_data = this;
+    return wabt::Result::Ok;
+  } else if (import->field_name == "finish") {
+    hostFunc->callback = wabtFinish;
     hostFunc->user_data = this;
     return wabt::Result::Ok;
   }
@@ -113,7 +119,7 @@ interp::Result WabtEthereumInterface::wabtUseGas(
   (void)num_results;
   (void)out_results;
 
-  heraAssert(num_args == 1, "");
+  heraAssert(num_args == 1, "Invalid number of args");
 
   WabtEthereumInterface *interface = reinterpret_cast<WabtEthereumInterface*>(user_data);
 
@@ -121,6 +127,33 @@ interp::Result WabtEthereumInterface::wabtUseGas(
 
   // FIXME: handle host trap here
   interface->eeiUseGas(gas);
+
+  return interp::Result::Ok;
+}
+
+interp::Result WabtEthereumInterface::wabtFinish(
+  const interp::HostFunc* func,
+  const interp::FuncSignature* sig,
+  Index num_args,
+  interp::TypedValue* args,
+  Index num_results,
+  interp::TypedValue* out_results,
+  void* user_data
+) {
+  (void)func;
+  (void)sig;
+  (void)num_results;
+  (void)out_results;
+
+  heraAssert(num_args == 2, "Invalid number of args");
+
+  WabtEthereumInterface *interface = reinterpret_cast<WabtEthereumInterface*>(user_data);
+
+  uint32_t offset = args[0].value.i32;
+  uint32_t length = args[1].value.i32;
+
+  // FIXME: handle host trap here
+  interface->eeiRevertOrFinish(false, offset, length);
 
   return interp::Result::Ok;
 }
@@ -179,7 +212,7 @@ ExecutionResult WabtEngine::execute(
 
   // No tracing, not threads
   wabt::interp::Executor executor(&env, nullptr, wabt::interp::Thread::Options{});
-  
+
   // Execute main
   wabt::interp::ExecResult wabtResult = executor.RunExport(&mainFunction, wabt::interp::TypedValues{});
 
