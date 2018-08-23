@@ -199,7 +199,7 @@ ExecutionResult WabtEngine::execute(
   (void)msg;
   (void)meterInterfaceGas;
 
-  HERA_DEBUG << "Executing..." << endl;
+  HERA_DEBUG << "Executing in wabt\n";
 
   // This is the wasm state
   wabt::interp::Environment env;
