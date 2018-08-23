@@ -143,12 +143,12 @@ ExecutionResult WabtEngine::execute(
 
   // Lets instantiate our state
   ExecutionResult result;
-  WabtEthereumInterface interface(context, state_code, msg, result, meterInterfaceGas);
+  WabtEthereumInterface* interface = new WabtEthereumInterface(context, state_code, msg, result, meterInterfaceGas);
 
   // Lets add our host module
   wabt::interp::HostModule* hostModule = env.AppendHostModule("ethereum");
   heraAssert(hostModule, "Failed to create host module.");
-  hostModule->import_delegate.reset(&interface);
+  hostModule->import_delegate.reset(interface);
 
   std::unique_ptr<wabt::FileStream> errorStream = wabt::FileStream::CreateStderr();
 
