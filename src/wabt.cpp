@@ -169,7 +169,7 @@ ExecutionResult WabtEngine::execute(
     &error_handler,
     &module
   );
-  heraAssert(module, "module not loaded?!");
+  ensureCondition(module, ContractValidationFailure, "Module failed to load.");
 
   // FIXME: iterate and find
   heraAssert(module->exports.size() > 0, "not exports");
