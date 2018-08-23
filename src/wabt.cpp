@@ -46,6 +46,52 @@ using namespace std;
 
 namespace hera {
 
+wabt::Result WabtEthereumInterface::ImportFunc(
+  wabt::interp::FuncImport* import,
+  wabt::interp::Func* func,
+  wabt::interp::FuncSignature* func_sig,
+  const ErrorCallback& callback
+) {
+  (void)import;
+  (void)func;
+  (void)func_sig;
+  (void)callback;
+  return wabt::Result::Error;
+}
+
+wabt::Result WabtEthereumInterface::ImportMemory(
+  wabt::interp::MemoryImport* import,
+  wabt::interp::Memory* mem,
+  const ErrorCallback& callback
+) {
+  (void)import;
+  (void)mem;
+  (void)callback;
+  return wabt::Result::Error;
+}
+
+wabt::Result WabtEthereumInterface::ImportGlobal(
+  wabt::interp::GlobalImport* import,
+  wabt::interp::Global* global,
+  const ErrorCallback& callback
+) {
+  (void)import;
+  (void)global;
+  (void)callback;
+  return wabt::Result::Error;
+}
+
+wabt::Result WabtEthereumInterface::ImportTable(
+  wabt::interp::TableImport* import,
+  wabt::interp::Table* table,
+  const ErrorCallback& callback
+) {
+  (void)import;
+  (void)table;
+  (void)callback;
+  return wabt::Result::Error;
+}
+
 ExecutionResult WabtEngine::execute(
   evmc_context* context,
   vector<uint8_t> const& code,
@@ -62,9 +108,13 @@ ExecutionResult WabtEngine::execute(
   // This is the wasm state
   wabt::interp::Environment env;
 
+  // Lets instantiate our state
+  ExecutionResult result;
+  WabtEthereumInterface interface(context, state_code, msg, result, meterInterfaceGas);
+
   // Lets add our host module
-  //wabt::interp::HostModule* host_module = env.AppendHostModule("ethereum");
-  //host_module->import_delegate.reset(instance...);
+  wabt::interp::HostModule* host_module = env.AppendHostModule("ethereum");
+  host_module->import_delegate.reset(&interface);
 
   std::unique_ptr<wabt::FileStream> errorStream = wabt::FileStream::CreateStderr();
 
@@ -97,7 +147,7 @@ ExecutionResult WabtEngine::execute(
   wabt::interp::Executor executor(&env, nullptr, wabt::interp::Thread::Options{});
   
   // Execute main
-  wabt::interp::ExecResult result = executor.RunExport(&mainFunction, wabt::interp::TypedValues{});
+  wabt::interp::ExecResult wabtResult = executor.RunExport(&mainFunction, wabt::interp::TypedValues{});
 
   // FIXME populate output
 
