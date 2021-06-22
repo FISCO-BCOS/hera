@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.8)
 
-if(NOT EXISTS ${CMAKE_SOURCE_DIR}/cmake/cable/.git)
-    message(FATAL_ERROR "Git submodules not initialized, execute:\n  git submodule update --init")
-endif()
+# if(NOT EXISTS ${CMAKE_SOURCE_DIR}/cmake/cable/.git)
+#     message(FATAL_ERROR "Git submodules not initialized, execute:\n  git submodule update --init")
+# endif()
 
 include(cmake/cable/bootstrap.cmake)
 include(CableBuildInfo)
@@ -11,7 +11,6 @@ include(CableCompilerSettings)
 include(CableToolchains)
 include(CMakePackageConfigHelpers)
 include(GNUInstallDirs)
-include(ProjectEVMC)
 include(Hunter/init)
 
 cable_configure_toolchain(DEFAULT cxx17-pic)
